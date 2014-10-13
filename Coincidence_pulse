@@ -1,0 +1,14 @@
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity coincidence_pulse IS
+	port(a, b: in 	std_logic;
+		  y:    out std_logic);
+end coincidence_pulse;
+
+architecture circuit of coincidence_pulse is
+begin
+	y <= a and b;
+end circuit;
+
+
