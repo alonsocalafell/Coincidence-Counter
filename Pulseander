@@ -1,0 +1,16 @@
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity pulseander is
+	port(pulse:       in std_logic;
+		  pulse_delay: out	std_logic);
+end pulseander;
+
+architecture Behavior of pulseander is
+	signal delayedpulse: std_logic;
+	
+begin
+	delayedpulse <= pulse and '1' after 0.5 ns;
+	pulse_delay <= delayedpulse;
+end Behavior;
+
