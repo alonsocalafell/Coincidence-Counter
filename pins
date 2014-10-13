@@ -1,0 +1,35 @@
+net "RS232_out" loc = "M14" | iostandard = LVTTL | drive = 8 | slew = slow; 
+
+net "clk" loc = "C9" | iostandard = LVCMOS33;
+net "clk" tnm_net = "clk_50";
+timespec TS_clk1 = period "clk_50" 20 ns HIGH 50%;
+
+net"FX2_IO_2"  loc = "D12" | iostandard = LVCMOS33 | slew = FAST | drive = 8;
+net"FX2_IO_4"  loc = "A8"  | iostandard = LVCMOS33 | slew = FAST | drive = 8;
+net"FX2_IO_6"  loc = "B11" | iostandard = LVCMOS33 | slew = FAST | drive = 8;
+net"FX2_IO_8"  loc = "E13" | iostandard = LVCMOS33 | slew = FAST | drive = 8;
+net"FX2_IO_10" loc = "A13" | iostandard = LVCMOS33 | slew = FAST | drive = 8;
+
+net "rotary_a" loc = "K18" | iostandard = LVTTL | pullup;
+net "rotary_b" loc = "G18" | iostandard = LVTTL | pullup;
+
+net "LCD_E" loc = "M18" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+net "LCD_RS" loc = "L18" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+net "LCD_RW" loc = "L17" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+
+net "reset" loc = "H13" | iostandard = LVTTL | pulldown;
+
+net "SF_D<3>" loc = "M15" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+net "SF_D<2>" loc = "P17" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+net "SF_D<1>" loc = "R16" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+net "SF_D<0>" loc = "R15" | iostandard = LVCMOS33 | drive = 4 | slew = slow;
+
+net "choose(0)" loc = "L13" | iostandard = LVTTL | drive | clock_dedicated_route = FALSE;
+net "choose(1)" loc = "L14" | iostandard = LVTTL | drive | clock_dedicated_route = FALSE;
+net "choose(2)" loc = "H18" | iostandard = LVTTL | drive | clock_dedicated_route = FALSE;
+net "choose(3)" loc = "N17" | iostandard = LVTTL | drive | clock_dedicated_route = FALSE;
+
+net "LED(0)" loc = "F12" | iostandard = LVTTL | slew = slow | drive = 8 ;
+net "LED(1)" loc = "E12" | iostandard = LVTTL | slew = slow | drive = 8 ;
+net "LED(2)" loc = "E11" | iostandard = LVTTL | slew = slow | drive = 8 ; 
+net "LED(3)" loc = "F11" | iostandard = LVTTL | slew = slow | drive = 8 ;
