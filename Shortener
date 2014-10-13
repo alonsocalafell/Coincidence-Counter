@@ -1,0 +1,13 @@
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity shortener is
+port (delayedpulse: in		std_logic;
+		pulse:        in		std_logic;
+		pulseout:     out	std_logic);
+end shortener;
+
+architecture Behavioral of shortener is
+begin
+	pulseout <= pulse and not delayedpulse;
+end Behavioral;
