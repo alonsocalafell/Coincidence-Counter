@@ -1,0 +1,289 @@
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity dataout40 is
+	port(A:				  in	std_logic_vector(39 downto 0);
+		  B:				  in	std_logic_vector(39 downto 0);
+		  C:				  in	std_logic_vector(39 downto 0);
+		  D:				  in	std_logic_vector(39 downto 0);
+		  H:				  in	std_logic_vector(39 downto 0);
+		  Coincidence_A: in	std_logic_vector(39 downto 0);
+		  Coincidence_B: in	std_logic_vector(39 downto 0);
+		  Coincidence_C: in	std_logic_vector(39 downto 0);
+		  Coincidence_D: in	std_logic_vector(39 downto 0);
+		  clk:           in	std_logic;
+		  data_trigger:  in  std_logic;
+		  RS232_out:     out	std_logic);
+end dataout40;
+
+architecture Behavior of dataout40 is
+
+signal index: std_logic_vector(5 downto 0) := "111111";
+signal Output: std_logic_vector(39 downto 0);
+signal data_select: std_logic_vector(3 downto 0) := "0000";
+
+begin
+
+process( clk, index )
+	begin
+		if clk'EVENT and clk = '1' then
+			if index = "111111" and data_trigger = '1' then --63
+				index <= "000000"; --0
+				RS232_out <= '1'; -- a throw away bit
+				OUTPUT <= A;
+				data_select <= "0000";
+
+			elsif index = "000000" then --0
+				index <= "000001"; --1
+				RS232_out <= '0'; -- the first start bit
+				
+			elsif index = "000001" then --1
+				index <= "000010"; --2
+				RS232_out <= Output(32);
+			
+			elsif index = "000010" then --2
+				index <= "000011"; --3
+				RS232_out <= Output(33);
+			
+			elsif index = "000011" then --3
+				index <= "000100"; --4
+				RS232_out <= Output(34);
+			
+			elsif index = "000100" then --4
+				index <= "000101"; --5
+				RS232_out <= Output(35);
+			
+			elsif index = "000101" then --5
+				index <= "000110"; --6
+				RS232_out <= Output(36);
+			
+			elsif index = "000110" then --6
+				index <= "000111"; --7
+				RS232_out <= Output(37);
+	
+			elsif index = "000111" then --7
+				index <= "001000"; --8
+				RS232_out <= Output(38);
+			
+			elsif index = "001000" then --8
+				index <= "001001"; --9
+				RS232_out <= Output(39); 
+				
+			elsif index = "001001" then --9
+				index <= "001010"; --10
+				RS232_out <= '1'; -- the first stop bit
+			
+			elsif index = "001010" then --10
+				index <= "001011"; --11
+				RS232_out <= '0'; -- the second start bit
+			
+			elsif index = "001011" then --11
+				index <= "001100"; --12
+				RS232_out <= Output(24); 
+			
+			elsif index = "001100" then --12
+				index <= "001101"; --13
+				RS232_out <= Output(25);
+			
+			elsif index = "001101" then --13
+				index <= "001110"; --14
+				RS232_out <= Output(26);
+			
+			elsif index = "001110" then --14
+				index <= "001111"; --15
+				RS232_out <= Output(27);
+			
+			elsif index = "001111" then --15
+				index <= "010000"; --16
+				RS232_out <= Output(28);
+			
+			elsif index = "010000" then --16
+				index <= "010001"; --17
+				RS232_out <= Output(29);
+			
+			elsif index = "010001" then --17
+				index <= "010010"; --18
+				RS232_out <= Output(30);
+			
+			elsif index = "010010" then --18
+				index <= "010011"; --19
+				RS232_out <= Output(31); -- 
+			
+			elsif index = "010011" then --19
+				index <= "010100"; --20
+				RS232_out <= '1'; -- the second stop bit
+			
+			elsif index = "010100" then --20
+				index <= "010101"; --21
+				RS232_out <= '0'; -- the third start bit
+			
+			elsif index = "010101" then --21
+				index <= "010110"; --22
+				RS232_out <= Output(16); 
+			
+			elsif index = "010110" then --22
+				index <= "010111"; --23
+				RS232_out <= Output(17); 
+			
+			elsif index = "010111" then --23
+				index <= "011000"; --24
+				RS232_out <= Output(18);
+			
+			elsif index = "011000" then --24
+				index <= "011001"; --25
+				RS232_out <= Output(19);
+			
+			elsif index = "011001" then --25
+				index <= "011010"; --26
+				RS232_out <= Output(20);
+			
+			elsif index = "011010" then --26
+				index <= "011011"; --27
+				RS232_out <= Output(21);
+			
+			elsif index = "011011" then --27
+				index <= "011100"; --28
+				RS232_out <= Output(22);
+			
+			elsif index = "011100" then --28
+				index <= "011101"; --29
+				RS232_out <= Output(23); 
+			
+			elsif index = "011101" then --29
+				index <= "011110"; --30
+				RS232_out <= '1'; -- the third stop bit
+			
+			elsif index = "011110" then --30
+				index <= "011111"; --31
+				RS232_out <= '0'; -- the forth start bit
+			
+			elsif index = "011111" then --31
+				index <= "100000"; --32
+				RS232_out <= Output(8); 
+			
+			elsif index = "100000" then --32
+				index <= "100001"; --33
+				RS232_out <= Output(9); 
+			
+			elsif index = "100001" then --33
+				index <= "100010"; --34
+				RS232_out <= Output(10); 
+			
+			elsif index = "100010" then --34
+				index <= "100011"; --35
+				RS232_out <= Output(11);
+			
+			elsif index = "100011" then --35
+				index <= "100100"; --36
+				RS232_out <= Output(12);
+			
+			elsif index = "100100" then --36
+				index <= "100101"; --37
+				RS232_out <= Output(13);
+			
+			elsif index = "100101" then --37
+				index <= "100110"; --38
+				RS232_out <= Output(14);
+			
+			ELSIF index = "100110" then --38
+				index <= "100111"; --39
+				RS232_out <= Output(15); 		
+				
+			elsif index = "100111" then --39
+				index <= "101000"; --40
+				RS232_out <= '1'; -- the forth stop bit
+			
+			elsif index = "101000" then --40
+				index <= "101001"; --41
+				RS232_out <= '0'; -- the fifth start bit
+			
+			elsif index = "101001" then --41
+				index <= "101010"; --42
+				RS232_out <= Output(0); 
+			
+			elsif index = "101010" then --42
+				index <= "101011"; --43
+				RS232_out <= Output(1); 
+			
+			elsif index = "101011" then --43
+				index <= "101100"; --44
+				RS232_out <= Output(2); 
+			
+			elsif index = "101100" then --44
+				index <= "101101"; --45
+				RS232_out <= Output(3);
+			
+			elsif index = "101101" then --45
+				index <= "101110"; --46
+				RS232_out <= Output(4);
+			
+			elsif index = "101110" then --46
+				index <= "101111"; --47
+				RS232_out <= Output(5);
+			
+			elsif index = "101111" then --47
+				index <= "110000"; --48
+				RS232_out <= Output(6);
+			
+			elsif index = "110000" then --48
+				index <= "110001"; --49
+				RS232_out <= Output(7);	
+			
+			elsif index = "110001" and data_select = "0000" then --53
+				index <= "000000";
+				data_select <= "0001"; -- increments data_select to begin output of B
+				Output <= B;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0001" then
+				index <= "000000";
+				data_select <= "0010"; -- increments data_select to begin output of C
+				Output <= C;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0010" then
+				index <= "000000";
+				data_select <= "0011"; -- increments data_select to begin output of D
+				Output <= D;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0011" then
+				index <= "000000";
+				data_select <= "0100"; -- increments data_select to begin output of H
+				Output <= H;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0100" then
+				index <= "000000";
+				data_select <= "0101"; -- increments data_select to begin output of Coincidence_A
+				Output <= Coincidence_A;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0101" then
+				index <= "000000";
+				data_select <= "0110"; -- increments data_select to begin output of Coincidence_B
+				Output <= Coincidence_B;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "0110" then
+				index <= "000000";
+				data_select <= "0111"; -- increments data_select to begin output of Coincidence_C
+				Output <= Coincidence_C;
+				RS232_out <= '1'; -- the fifth stop bit
+			
+			elsif index = "110001" and data_select = "0111" then
+				index <= "000000";
+				data_select <= "1000"; -- increments data_select to begin output of Coincidence_D
+				Output <= Coincidence_D;
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			elsif index = "110001" and data_select = "1000" then
+				index <= "111111";
+				RS232_out <= '1'; -- the fifth stop bit
+				
+			else index <= "111111";
+				RS232_out <= '1'; -- sets all subsequent bits to negative voltage
+			end if;
+		end if;		
+	end process;
+end Behavior;
