@@ -1,0 +1,629 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity main is
+	port(RS232_out:out std_logic; --serial port to output the data stream
+		  clk:      in	 std_logic; --internal 50MHz clock
+		  FX2_IO_2: in	 std_logic; --A signal pin
+		  FX2_IO_4: in	 std_logic; --B signal pin
+		  FX2_IO_6: in	 std_logic; --C signal pin
+		  FX2_IO_8: in	 std_logic; --D signal pin
+		  FX2_IO_10:in	 std_logic;	--H signal pin
+		  rotary_a: in  std_logic; 
+        rotary_b: in  std_logic;
+		  reset:    in  std_logic;
+		  choose:   in  std_logic_vector(3 downto 0); --slide switches
+		  LED:      out std_logic_vector(3 downto 0); --LEDs connected to slide switches
+		  SF_CE0:   out std_logic := '1'; --unable StrataFlash Parallel Flash PROM (share SPI bus)
+		  SF_D:     out std_logic_vector(3 downto 0); --4bit data interface for LCD
+		  LCD_E:    out std_logic; --LCD read/write enable pulse
+		  LCD_RS:   out std_logic; --LCD register select
+		  LCD_RW:   out std_logic); --LCD read/write control
+end main;
+
+architecture Behavior of main is
+
+--	signal data_trigger_count: std_logic_vector(39 downto 0); 
+	signal data_trigger_count: integer range 0 to 1920 := 0;
+	signal data_trigger_reset: std_logic;
+	signal data_trigger: std_logic;
+	signal baud_rate_clk: std_logic;
+--	signal baud_rate_count: std_logic_vector(39 downto 0); 
+	signal baud_rate_count: integer range 0 to 2064 := 0;
+	
+	signal Ainput: std_logic;
+	signal Binput: std_logic;
+	signal Cinput: std_logic;
+	signal Dinput: std_logic;
+	signal Hinput: std_logic;
+	
+	signal Ashort: std_logic;
+	signal Bshort: std_logic;
+	signal Cshort: std_logic;
+	signal Dshort: std_logic;
+	signal Hshort: std_logic;
+	
+	signal Coincidence_A: std_logic; 
+	signal Coincidence_B: std_logic;
+	signal Coincidence_C: std_logic;
+	signal Coincidence_D: std_logic;
+	
+	signal Count_top_A: std_logic_vector(39 downto 0);
+	signal Count_top_B: std_logic_vector(39 downto 0);
+	signal Count_top_C: std_logic_vector(39 downto 0);
+	signal Count_top_D: std_logic_vector(39 downto 0);
+	
+	signal Count_out_A: std_logic_vector(39 downto 0);
+	signal Count_out_B: std_logic_vector(39 downto 0);
+	signal Count_out_C: std_logic_vector(39 downto 0);
+	signal Count_out_D: std_logic_vector(39 downto 0);
+	
+	signal A_top: std_logic_vector(39 downto 0);
+	signal B_top: std_logic_vector(39 downto 0);
+	signal C_top: std_logic_vector(39 downto 0);
+	signal D_top: std_logic_vector(39 downto 0);
+	signal H_top: std_logic_vector(39 downto 0);
+	
+	signal A_out: std_logic_vector(39 downto 0);
+	signal B_out: std_logic_vector(39 downto 0);
+	signal C_out: std_logic_vector(39 downto 0);
+	signal D_out: std_logic_vector(39 downto 0);
+	signal H_out: std_logic_vector(39 downto 0);
+	
+	signal n_A: integer range 0 to 40 := 0;
+	signal n_B: integer range 0 to 40 := 0;
+	signal n_C: integer range 0 to 40 := 0;
+	signal n_D: integer range 0 to 40 := 0;
+	signal n_H: integer range 0 to 40 := 0;
+	
+	signal A_internal: std_logic_vector(40 downto 0);
+	signal B_internal: std_logic_vector(40 downto 0);
+	signal C_internal: std_logic_vector(40 downto 0);
+	signal D_internal: std_logic_vector(40 downto 0);
+	signal H_internal: std_logic_vector(40 downto 0);
+	
+	signal value_show: integer range 0 to 40 := 0;
+	signal symbol_0, symbol_1, symbol_2:   std_logic_vector(7 downto 0);
+	signal symbol_3, symbol_4, symbol_5:   std_logic_vector(7 downto 0);
+	signal symbol_6, symbol_7, symbol_8:   std_logic_vector(7 downto 0);
+	signal symbol_9, symbol_10, symbol_11: std_logic_vector(7 downto 0);
+	
+	signal rotary_a_in:     std_logic;
+	signal rotary_b_in:     std_logic;
+	signal rotary_in:       std_logic_vector(1 downto 0);
+	signal rotary_q1:       std_logic;
+	signal rotary_q2:       std_logic;
+	signal delay_rotary_q1: std_logic;
+	signal rotary_event:    std_logic;
+	signal rotary_left:     std_logic;
+	
+	signal value_A_counter: integer range 0 to 40 := 0;
+	signal value_B_counter: integer range 0 to 40 := 0;
+	signal value_C_counter: integer range 0 to 40 := 0;
+	signal value_D_counter: integer range 0 to 40 := 0;
+	signal value_H_counter: integer range 0 to 40 := 0;
+	
+	signal A_mux: std_logic;
+	signal B_mux: std_logic;
+	signal C_mux: std_logic;
+	signal D_mux: std_logic;
+	signal H_mux: std_logic;
+	
+begin
+	
+	Ainput <= FX2_IO_2;  --Ainput signal connected to the pin
+	Binput <= FX2_IO_4;  --Binput signal connected to the pin
+	Cinput <= FX2_IO_6;  --Cinput signal connected to the pin
+	Dinput <= FX2_IO_8;  --Dinput signal connected to the pin
+	Hinput <= FX2_IO_10; --Hinput signal connected to the pin
+	
+	PA0:  entity work.pulseander port map( pulse => Ainput,         pulse_delay => A_internal(0));  --0.5ns
+	PA1:  entity work.pulseander port map( pulse => A_internal(0),  pulse_delay => A_internal(1));  --1.0ns
+	PA2:  entity work.pulseander port map( pulse => A_internal(1),  pulse_delay => A_internal(2));  --1.5ns
+	PA3:  entity work.pulseander port map( pulse => A_internal(2),  pulse_delay => A_internal(3));  --2.0ns
+	PA4:  entity work.pulseander port map( pulse => A_internal(3),  pulse_delay => A_internal(4));  --2.5ns
+	PA5:  entity work.pulseander port map( pulse => A_internal(4),  pulse_delay => A_internal(5));  --3.0ns
+	PA6:  entity work.pulseander port map( pulse => A_internal(5),  pulse_delay => A_internal(6));  --3.5ns
+	PA7:  entity work.pulseander port map( pulse => A_internal(6),  pulse_delay => A_internal(7));  --4.0ns
+	PA8:  entity work.pulseander port map( pulse => A_internal(7),  pulse_delay => A_internal(8));  --4.5ns
+	PA9:  entity work.pulseander port map( pulse => A_internal(8),  pulse_delay => A_internal(9));  --5.0ns
+	PA10: entity work.pulseander port map( pulse => A_internal(9),  pulse_delay => A_internal(10)); --5.5ns
+	PA11: entity work.pulseander port map( pulse => A_internal(10), pulse_delay => A_internal(11)); --6.0ns
+	PA12: entity work.pulseander port map( pulse => A_internal(11), pulse_delay => A_internal(12)); --6.5ns
+	PA13: entity work.pulseander port map( pulse => A_internal(12), pulse_delay => A_internal(13)); --7.0ns
+	PA14: entity work.pulseander port map( pulse => A_internal(13), pulse_delay => A_internal(14)); --7.5ns
+	PA15: entity work.pulseander port map( pulse => A_internal(14), pulse_delay => A_internal(15)); --8.0ns
+	PA16: entity work.pulseander port map( pulse => A_internal(15), pulse_delay => A_internal(16)); --8.5ns
+	PA17: entity work.pulseander port map( pulse => A_internal(16), pulse_delay => A_internal(17)); --9.0ns
+	PA18: entity work.pulseander port map( pulse => A_internal(17), pulse_delay => A_internal(18)); --9.5ns
+	PA19: entity work.pulseander port map( pulse => A_internal(18), pulse_delay => A_internal(19)); --10.0ns
+	PA20: entity work.pulseander port map( pulse => A_internal(19), pulse_delay => A_internal(20)); --10.5ns
+	PA21: entity work.pulseander port map( pulse => A_internal(20), pulse_delay => A_internal(21)); --11.0ns
+	PA22: entity work.pulseander port map( pulse => A_internal(21), pulse_delay => A_internal(22)); --11.5ns
+	PA23: entity work.pulseander port map( pulse => A_internal(22), pulse_delay => A_internal(23)); --12.0ns
+	PA24: entity work.pulseander port map( pulse => A_internal(23), pulse_delay => A_internal(24)); --12.5ns
+	PA25: entity work.pulseander port map( pulse => A_internal(24), pulse_delay => A_internal(25)); --13.0ns
+	PA26: entity work.pulseander port map( pulse => A_internal(25), pulse_delay => A_internal(26)); --13.5ns
+	PA27: entity work.pulseander port map( pulse => A_internal(26), pulse_delay => A_internal(27)); --14.0ns
+	PA28: entity work.pulseander port map( pulse => A_internal(27), pulse_delay => A_internal(28)); --14.5ns
+	PA29: entity work.pulseander port map( pulse => A_internal(28), pulse_delay => A_internal(29)); --15.0ns
+	PA30: entity work.pulseander port map( pulse => A_internal(29), pulse_delay => A_internal(30)); --15.5ns
+	PA31: entity work.pulseander port map( pulse => A_internal(30), pulse_delay => A_internal(31)); --16.0ns
+	PA32: entity work.pulseander port map( pulse => A_internal(31), pulse_delay => A_internal(32)); --16.5ns
+	PA33: entity work.pulseander port map( pulse => A_internal(32), pulse_delay => A_internal(33)); --17.0ns
+	PA34: entity work.pulseander port map( pulse => A_internal(33), pulse_delay => A_internal(34)); --17.5ns
+	PA35: entity work.pulseander port map( pulse => A_internal(34), pulse_delay => A_internal(35)); --18.0ns
+	PA36: entity work.pulseander port map( pulse => A_internal(35), pulse_delay => A_internal(36)); --18.5ns
+	PA37: entity work.pulseander port map( pulse => A_internal(36), pulse_delay => A_internal(37)); --19.0ns
+	PA38: entity work.pulseander port map( pulse => A_internal(37), pulse_delay => A_internal(38)); --19.5ns
+	PA39: entity work.pulseander port map( pulse => A_internal(38), pulse_delay => A_internal(39)); --20.0ns
+
+	PB0:  entity work.pulseander port map( pulse => Binput,         pulse_delay => B_internal(0));  --0.5ns
+	PB1:  entity work.pulseander port map( pulse => B_internal(0),  pulse_delay => B_internal(1));  --1.0ns
+	PB2:  entity work.pulseander port map( pulse => B_internal(1),  pulse_delay => B_internal(2));  --1.5ns
+	PB3:  entity work.pulseander port map( pulse => B_internal(2),  pulse_delay => B_internal(3));  --2.0ns
+	PB4:  entity work.pulseander port map( pulse => B_internal(3),  pulse_delay => B_internal(4));  --2.5ns
+	PB5:  entity work.pulseander port map( pulse => B_internal(4),  pulse_delay => B_internal(5));  --3.0ns
+	PB6:  entity work.pulseander port map( pulse => B_internal(5),  pulse_delay => B_internal(6));  --3.5ns
+	PB7:  entity work.pulseander port map( pulse => B_internal(6),  pulse_delay => B_internal(7));  --4.0ns
+	PB8:  entity work.pulseander port map( pulse => B_internal(7),  pulse_delay => B_internal(8));  --4.5ns
+	PB9:  entity work.pulseander port map( pulse => B_internal(8),  pulse_delay => B_internal(9));  --5.0ns
+	PB10: entity work.pulseander port map( pulse => B_internal(9),  pulse_delay => B_internal(10)); --5.5ns
+	PB11: entity work.pulseander port map( pulse => B_internal(10), pulse_delay => B_internal(11)); --6.0ns
+	PB12: entity work.pulseander port map( pulse => B_internal(11), pulse_delay => B_internal(12)); --6.5ns
+	PB13: entity work.pulseander port map( pulse => B_internal(12), pulse_delay => B_internal(13)); --7.0ns
+	PB14: entity work.pulseander port map( pulse => B_internal(13), pulse_delay => B_internal(14)); --7.5ns
+	PB15: entity work.pulseander port map( pulse => B_internal(14), pulse_delay => B_internal(15)); --8.0ns
+	PB16: entity work.pulseander port map( pulse => B_internal(15), pulse_delay => B_internal(16)); --8.5ns
+	PB17: entity work.pulseander port map( pulse => B_internal(16), pulse_delay => B_internal(17)); --9.0ns
+	PB18: entity work.pulseander port map( pulse => B_internal(17), pulse_delay => B_internal(18)); --9.5ns
+	PB19: entity work.pulseander port map( pulse => B_internal(18), pulse_delay => B_internal(19)); --10.0ns
+	PB20: entity work.pulseander port map( pulse => B_internal(19), pulse_delay => B_internal(20)); --10.5ns
+	PB21: entity work.pulseander port map( pulse => B_internal(20), pulse_delay => B_internal(21)); --11.0ns
+	PB22: entity work.pulseander port map( pulse => B_internal(21), pulse_delay => B_internal(22)); --11.5ns
+	PB23: entity work.pulseander port map( pulse => B_internal(22), pulse_delay => B_internal(23)); --12.0ns
+	PB24: entity work.pulseander port map( pulse => B_internal(23), pulse_delay => B_internal(24)); --12.5ns
+	PB25: entity work.pulseander port map( pulse => B_internal(24), pulse_delay => B_internal(25)); --13.0ns
+	PB26: entity work.pulseander port map( pulse => B_internal(25), pulse_delay => B_internal(26)); --13.5ns
+	PB27: entity work.pulseander port map( pulse => B_internal(26), pulse_delay => B_internal(27)); --14.0ns
+	PB28: entity work.pulseander port map( pulse => B_internal(27), pulse_delay => B_internal(28)); --14.5ns
+	PB29: entity work.pulseander port map( pulse => B_internal(28), pulse_delay => B_internal(29)); --15.0ns
+	PB30: entity work.pulseander port map( pulse => B_internal(29), pulse_delay => B_internal(30)); --15.5ns
+	PB31: entity work.pulseander port map( pulse => B_internal(30), pulse_delay => B_internal(31)); --16.0ns
+	PB32: entity work.pulseander port map( pulse => B_internal(31), pulse_delay => B_internal(32)); --16.5ns
+	PB33: entity work.pulseander port map( pulse => B_internal(32), pulse_delay => B_internal(33)); --17.0ns
+	PB34: entity work.pulseander port map( pulse => B_internal(33), pulse_delay => B_internal(34)); --17.5ns
+	PB35: entity work.pulseander port map( pulse => B_internal(34), pulse_delay => B_internal(35)); --18.0ns
+	PB36: entity work.pulseander port map( pulse => B_internal(35), pulse_delay => B_internal(36)); --18.5ns
+	PB37: entity work.pulseander port map( pulse => B_internal(36), pulse_delay => B_internal(37)); --19.0ns
+	PB38: entity work.pulseander port map( pulse => B_internal(37), pulse_delay => B_internal(38)); --19.5ns
+	PB39: entity work.pulseander port map( pulse => B_internal(38), pulse_delay => B_internal(39)); --20.0ns
+	
+	PC0:  entity work.pulseander port map( pulse => Cinput,         pulse_delay => C_internal(0));  --0.5ns
+	PC1:  entity work.pulseander port map( pulse => C_internal(0),  pulse_delay => C_internal(1));  --1.0ns
+	PC2:  entity work.pulseander port map( pulse => C_internal(1),  pulse_delay => C_internal(2));  --1.5ns
+	PC3:  entity work.pulseander port map( pulse => C_internal(2),  pulse_delay => C_internal(3));  --2.0ns
+	PC4:  entity work.pulseander port map( pulse => C_internal(3),  pulse_delay => C_internal(4));  --2.5ns
+	PC5:  entity work.pulseander port map( pulse => C_internal(4),  pulse_delay => C_internal(5));  --3.0ns
+	PC6:  entity work.pulseander port map( pulse => C_internal(5),  pulse_delay => C_internal(6));  --3.5ns
+	PC7:  entity work.pulseander port map( pulse => C_internal(6),  pulse_delay => C_internal(7));  --4.0ns
+	PC8:  entity work.pulseander port map( pulse => C_internal(7),  pulse_delay => C_internal(8));  --4.5ns
+	PC9:  entity work.pulseander port map( pulse => C_internal(8),  pulse_delay => C_internal(9));  --5.0ns
+	PC10: entity work.pulseander port map( pulse => C_internal(9),  pulse_delay => C_internal(10)); --5.5ns
+	PC11: entity work.pulseander port map( pulse => C_internal(10), pulse_delay => C_internal(11)); --6.0ns
+	PC12: entity work.pulseander port map( pulse => C_internal(11), pulse_delay => C_internal(12)); --6.5ns
+	PC13: entity work.pulseander port map( pulse => C_internal(12), pulse_delay => C_internal(13)); --7.0ns
+	PC14: entity work.pulseander port map( pulse => C_internal(13), pulse_delay => C_internal(14)); --7.5ns
+	PC15: entity work.pulseander port map( pulse => C_internal(14), pulse_delay => C_internal(15)); --8.0ns
+	PC16: entity work.pulseander port map( pulse => C_internal(15), pulse_delay => C_internal(16)); --8.5ns
+	PC17: entity work.pulseander port map( pulse => C_internal(16), pulse_delay => C_internal(17)); --9.0ns
+	PC18: entity work.pulseander port map( pulse => C_internal(17), pulse_delay => C_internal(18)); --9.5ns
+	PC19: entity work.pulseander port map( pulse => C_internal(18), pulse_delay => C_internal(19)); --10.0ns
+	PC20: entity work.pulseander port map( pulse => C_internal(19), pulse_delay => C_internal(20)); --10.5ns
+	PC21: entity work.pulseander port map( pulse => C_internal(20), pulse_delay => C_internal(21)); --11.0ns
+	PC22: entity work.pulseander port map( pulse => C_internal(21), pulse_delay => C_internal(22)); --11.5ns
+	PC23: entity work.pulseander port map( pulse => C_internal(22), pulse_delay => C_internal(23)); --12.0ns
+	PC24: entity work.pulseander port map( pulse => C_internal(23), pulse_delay => C_internal(24)); --12.5ns
+	PC25: entity work.pulseander port map( pulse => C_internal(24), pulse_delay => C_internal(25)); --13.0ns
+	PC26: entity work.pulseander port map( pulse => C_internal(25), pulse_delay => C_internal(26)); --13.5ns
+	PC27: entity work.pulseander port map( pulse => C_internal(26), pulse_delay => C_internal(27)); --14.0ns
+	PC28: entity work.pulseander port map( pulse => C_internal(27), pulse_delay => C_internal(28)); --14.5ns
+	PC29: entity work.pulseander port map( pulse => C_internal(28), pulse_delay => C_internal(29)); --15.0ns
+	PC30: entity work.pulseander port map( pulse => C_internal(29), pulse_delay => C_internal(30)); --15.5ns
+	PC31: entity work.pulseander port map( pulse => C_internal(30), pulse_delay => C_internal(31)); --16.0ns
+	PC32: entity work.pulseander port map( pulse => C_internal(31), pulse_delay => C_internal(32)); --16.5ns
+	PC33: entity work.pulseander port map( pulse => C_internal(32), pulse_delay => C_internal(33)); --17.0ns
+	PC34: entity work.pulseander port map( pulse => C_internal(33), pulse_delay => C_internal(34)); --17.5ns
+	PC35: entity work.pulseander port map( pulse => C_internal(34), pulse_delay => C_internal(35)); --18.0ns
+	PC36: entity work.pulseander port map( pulse => C_internal(35), pulse_delay => C_internal(36)); --18.5ns
+	PC37: entity work.pulseander port map( pulse => C_internal(36), pulse_delay => C_internal(37)); --19.0ns
+	PC38: entity work.pulseander port map( pulse => C_internal(37), pulse_delay => C_internal(38)); --19.5ns
+	PC39: entity work.pulseander port map( pulse => C_internal(38), pulse_delay => C_internal(39)); --20.0ns
+
+	
+
+	PD0:  entity work.pulseander port map( pulse => Dinput,         pulse_delay => D_internal(0));   --0.5ns
+	PD1:  entity work.pulseander port map( pulse => D_internal(0),  pulse_delay => D_internal(1));   --1.0ns
+	PD2:  entity work.pulseander port map( pulse => D_internal(1),  pulse_delay => D_internal(2));   --1.5ns
+	PD3:  entity work.pulseander port map( pulse => D_internal(2),  pulse_delay => D_internal(3));   --2.0ns
+	PD4:  entity work.pulseander port map( pulse => D_internal(3),  pulse_delay => D_internal(4));   --2.5ns
+	PD5:  entity work.pulseander port map( pulse => D_internal(4),  pulse_delay => D_internal(5));   --3.0ns
+	PD6:  entity work.pulseander port map( pulse => D_internal(5),  pulse_delay => D_internal(6));   --3.5ns
+	PD7:  entity work.pulseander port map( pulse => D_internal(6),  pulse_delay => D_internal(7));   --4.0ns
+	PD8:  entity work.pulseander port map( pulse => D_internal(7),  pulse_delay => D_internal(8));   --4.5ns
+	PD9:  entity work.pulseander port map( pulse => D_internal(8),  pulse_delay => D_internal(9)  ); --5.0ns
+	PD10: entity work.pulseander port map( pulse => D_internal(9),  pulse_delay => D_internal(10) ); --5.5ns
+	PD11: entity work.pulseander port map( pulse => D_internal(10), pulse_delay => D_internal(11) ); --6.0ns
+	PD12: entity work.pulseander port map( pulse => D_internal(11), pulse_delay => D_internal(12) ); --6.5ns
+	PD13: entity work.pulseander port map( pulse => D_internal(12), pulse_delay => D_internal(13) ); --7.0ns
+	PD14: entity work.pulseander port map( pulse => D_internal(13), pulse_delay => D_internal(14) ); --7.5ns
+	PD15: entity work.pulseander port map( pulse => D_internal(14), pulse_delay => D_internal(15) ); --8.0ns
+	PD16: entity work.pulseander port map( pulse => D_internal(15), pulse_delay => D_internal(16) ); --8.5ns
+	PD17: entity work.pulseander port map( pulse => D_internal(16), pulse_delay => D_internal(17) ); --9.0ns
+	PD18: entity work.pulseander port map( pulse => D_internal(17), pulse_delay => D_internal(18) ); --9.5ns
+	PD19: entity work.pulseander port map( pulse => D_internal(18), pulse_delay => D_internal(19) ); --10.0ns
+	PD20: entity work.pulseander port map( pulse => D_internal(19), pulse_delay => D_internal(20) ); --10.5ns
+	PD21: entity work.pulseander port map( pulse => D_internal(20), pulse_delay => D_internal(21) ); --11.0ns
+	PD22: entity work.pulseander port map( pulse => D_internal(21), pulse_delay => D_internal(22) ); --11.5ns
+	PD23: entity work.pulseander port map( pulse => D_internal(22), pulse_delay => D_internal(23) ); --12.0ns
+	PD24: entity work.pulseander port map( pulse => D_internal(23), pulse_delay => D_internal(24) ); --12.5ns
+	PD25: entity work.pulseander port map( pulse => D_internal(24), pulse_delay => D_internal(25) ); --13.0ns
+	PD26: entity work.pulseander port map( pulse => D_internal(25), pulse_delay => D_internal(26) ); --13.5ns
+	PD27: entity work.pulseander port map( pulse => D_internal(26), pulse_delay => D_internal(27) ); --14.0ns
+	PD28: entity work.pulseander port map( pulse => D_internal(27), pulse_delay => D_internal(28) ); --14.5ns
+	PD29: entity work.pulseander port map( pulse => D_internal(28), pulse_delay => D_internal(29) ); --15.0ns
+	PD30: entity work.pulseander port map( pulse => D_internal(29), pulse_delay => D_internal(30) ); --15.5ns
+	PD31: entity work.pulseander port map( pulse => D_internal(30), pulse_delay => D_internal(31) ); --16.0ns
+	PD32: entity work.pulseander port map( pulse => D_internal(31), pulse_delay => D_internal(32) ); --16.5ns
+	PD33: entity work.pulseander port map( pulse => D_internal(32), pulse_delay => D_internal(33) ); --17.0ns
+	PD34: entity work.pulseander port map( pulse => D_internal(33), pulse_delay => D_internal(34) ); --17.5ns
+	PD35: entity work.pulseander port map( pulse => D_internal(34), pulse_delay => D_internal(35) ); --18.0ns
+	PD36: entity work.pulseander port map( pulse => D_internal(35), pulse_delay => D_internal(36) ); --18.5ns
+	PD37: entity work.pulseander port map( pulse => D_internal(36), pulse_delay => D_internal(37) ); --19.0ns
+	PD38: entity work.pulseander port map( pulse => D_internal(37), pulse_delay => D_internal(38) ); --19.5ns
+	PD39: entity work.pulseander port map( pulse => D_internal(38), pulse_delay => D_internal(39) ); --20.0ns
+
+
+	PH0:  entity work.pulseander port map( pulse => Hinput,         pulse_delay => H_internal(0));  --0.5ns
+	PH1:  entity work.pulseander port map( pulse => H_internal(0),  pulse_delay => H_internal(1));  --1.0ns
+	PH2:  entity work.pulseander port map( pulse => H_internal(1),  pulse_delay => H_internal(2));  --1.5ns
+	PH3:  entity work.pulseander port map( pulse => H_internal(2),  pulse_delay => H_internal(3));  --2.0ns
+	PH4:  entity work.pulseander port map( pulse => H_internal(3),  pulse_delay => H_internal(4));  --2.5ns
+	PH5:  entity work.pulseander port map( pulse => H_internal(4),  pulse_delay => H_internal(5));  --3.0ns
+	PH6:  entity work.pulseander port map( pulse => H_internal(5),  pulse_delay => H_internal(6));  --3.5ns
+	PH7:  entity work.pulseander port map( pulse => H_internal(6),  pulse_delay => H_internal(7));  --4.0ns
+	PH8:  entity work.pulseander port map( pulse => H_internal(7),  pulse_delay => H_internal(8));  --4.5ns
+	PH9:  entity work.pulseander port map( pulse => H_internal(8),  pulse_delay => H_internal(9));  --5.0ns
+	PH10: entity work.pulseander port map( pulse => H_internal(9),  pulse_delay => H_internal(10)); --5.5ns
+	PH11: entity work.pulseander port map( pulse => H_internal(10), pulse_delay => H_internal(11)); --6.0ns
+	PH12: entity work.pulseander port map( pulse => H_internal(11), pulse_delay => H_internal(12)); --6.5ns
+	PH13: entity work.pulseander port map( pulse => H_internal(12), pulse_delay => H_internal(13)); --7.0ns
+	PH14: entity work.pulseander port map( pulse => H_internal(13), pulse_delay => H_internal(14)); --7.5ns
+	PH15: entity work.pulseander port map( pulse => H_internal(14), pulse_delay => H_internal(15)); --8.0ns
+	PH16: entity work.pulseander port map( pulse => H_internal(15), pulse_delay => H_internal(16)); --8.5ns
+	PH17: entity work.pulseander port map( pulse => H_internal(16), pulse_delay => H_internal(17)); --9.0ns
+	PH18: entity work.pulseander port map( pulse => H_internal(17), pulse_delay => H_internal(18)); --9.5ns
+	PH19: entity work.pulseander port map( pulse => H_internal(18), pulse_delay => H_internal(19)); --10.0ns
+	PH20: entity work.pulseander port map( pulse => H_internal(19), pulse_delay => H_internal(20)); --10.5ns
+	PH21: entity work.pulseander port map( pulse => H_internal(20), pulse_delay => H_internal(21)); --11.0ns
+	PH22: entity work.pulseander port map( pulse => H_internal(21), pulse_delay => H_internal(22)); --11.5ns
+	PH23: entity work.pulseander port map( pulse => H_internal(22), pulse_delay => H_internal(23)); --12.0ns
+	PH24: entity work.pulseander port map( pulse => H_internal(23), pulse_delay => H_internal(24)); --12.5ns
+	PH25: entity work.pulseander port map( pulse => H_internal(24), pulse_delay => H_internal(25)); --13.0ns
+	PH26: entity work.pulseander port map( pulse => H_internal(25), pulse_delay => H_internal(26)); --13.5ns
+	PH27: entity work.pulseander port map( pulse => H_internal(26), pulse_delay => H_internal(27)); --14.0ns
+	PH28: entity work.pulseander port map( pulse => H_internal(27), pulse_delay => H_internal(28)); --14.5ns
+	PH29: entity work.pulseander port map( pulse => H_internal(28), pulse_delay => H_internal(29)); --15.0ns
+	PH30: entity work.pulseander port map( pulse => H_internal(29), pulse_delay => H_internal(30)); --15.5ns
+	PH31: entity work.pulseander port map( pulse => H_internal(30), pulse_delay => H_internal(31)); --16.0ns
+	PH32: entity work.pulseander port map( pulse => H_internal(31), pulse_delay => H_internal(32)); --16.5ns
+	PH33: entity work.pulseander port map( pulse => H_internal(32), pulse_delay => H_internal(33)); --17.0ns
+	PH34: entity work.pulseander port map( pulse => H_internal(33), pulse_delay => H_internal(34)); --17.5ns
+	PH35: entity work.pulseander port map( pulse => H_internal(34), pulse_delay => H_internal(35)); --18.0ns
+	PH36: entity work.pulseander port map( pulse => H_internal(35), pulse_delay => H_internal(36)); --18.5ns
+	PH37: entity work.pulseander port map( pulse => H_internal(36), pulse_delay => H_internal(37)); --19.0ns
+	PH38: entity work.pulseander port map( pulse => H_internal(37), pulse_delay => H_internal(38)); --19.5ns
+	PH39: entity work.pulseander port map( pulse => H_internal(38), pulse_delay => H_internal(39)); --20.0ns
+	
+rotary_filter: process(clk)
+begin
+   if clk'event and clk='1' then
+      rotary_a_in <= rotary_a;
+      rotary_b_in <= rotary_b;
+      rotary_in <= rotary_b_in & rotary_a_in;
+      case rotary_in is
+        when "00" => rotary_q1 <= '0';         
+                     rotary_q2 <= rotary_q2;
+        when "01" => rotary_q1 <= rotary_q1;
+                     rotary_q2 <= '0';
+        when "11" => rotary_q1 <= '1';
+                     rotary_q2 <= rotary_q2;
+        when "10" => rotary_q1 <= rotary_q1;
+                     rotary_q2 <= '1';
+        when others => rotary_q1 <= rotary_q1; 
+                       rotary_q2 <= rotary_q2; 
+      end case;
+    end if;
+end process rotary_filter;
+
+direction: process(clk)
+begin
+   if clk'event and clk='1' then
+      delay_rotary_q1 <= rotary_q1;
+      if rotary_q1='1' and delay_rotary_q1='0' then
+        rotary_event <= '1';
+        rotary_left <= rotary_q2;
+      else
+        rotary_event <= '0';
+        rotary_left <= rotary_left;
+      end if;
+   end if;
+end process direction;
+
+choose_window : process(clk)
+begin
+	if clk'event and clk = '1' then
+	case choose is
+		when "0001" => --select Ainput to modify pulse length
+			value_show <= value_A_counter;
+			symbol_0 <= X"53";  --S
+			symbol_1 <= X"69";  --i
+			symbol_2 <= X"67";  --g
+			symbol_3 <= X"6E";  --n
+			symbol_4 <= X"61";  --a
+			symbol_5 <= X"6C";  --l 
+			symbol_6 <= X"41";  --A
+			symbol_7 <= X"20";  --space
+			symbol_8 <= X"74";  --t
+			symbol_9 <= X"3D";  --=
+			symbol_10 <= X"6E"; --n
+			symbol_11 <= X"73"; --s
+			if rotary_event='1' then
+			  if rotary_left='1' then 
+				 n_A <= n_A + 1; --increase vector component
+				 value_A_counter <= value_A_counter + 1;
+			  else
+				 n_A <= n_A - 1; --decrease vector component
+				 value_A_counter <= value_A_counter - 1;
+			  end if;
+			end if;	
+		when "0010" => --select Binput to modify pulse length
+			value_show <= value_B_counter;
+			symbol_0 <= X"53";  --S
+			symbol_1 <= X"69";  --i
+			symbol_2 <= X"67";  --g
+			symbol_3 <= X"6E";  --n
+			symbol_4 <= X"61";  --a
+			symbol_5 <= X"6C";  --l
+			symbol_6 <= X"42";  --B
+			symbol_7 <= X"20";  --space
+			symbol_8 <= X"74";  --t
+			symbol_9 <= X"3D";  --=
+			symbol_10 <= X"6E"; --n
+			symbol_11 <= X"73"; --s
+			if rotary_event='1' then
+			  if rotary_left='1' then 
+				 n_B <= n_B+1; --increase vector component
+				 value_B_counter <= value_B_counter + 1;
+			  else
+				 n_B <= n_B-1; --decrease vector component
+				 value_B_counter <= value_B_counter - 1;
+			  end if;
+			end if;
+		when "0100" => --select Cinput to modify pulse length
+			value_show <= value_C_counter;
+			symbol_0 <= X"53";  --S
+			symbol_1 <= X"69";  --i
+			symbol_2 <= X"67";  --g
+			symbol_3 <= X"6E";  --n
+			symbol_4 <= X"61";  --a
+			symbol_5 <= X"6C";  --l
+			symbol_6 <= X"43";  --C
+			symbol_7 <= X"20";  --space
+			symbol_8 <= X"74";  --t
+			symbol_9 <= X"3D";  --=
+			symbol_10 <= X"6E"; --n
+			symbol_11 <= X"73"; --s
+			if rotary_event='1' then
+			  if rotary_left='1' then 
+				 n_C <= n_C+1; --increase vector component
+				 value_C_counter <= value_C_counter + 1;
+			  else
+				 n_C <= n_C-1; --decrease vector component
+				 value_C_counter <= value_C_counter - 1;
+			  end if;
+			end if;
+		when "1000" => --select Dinput to modify pulse length
+			value_show <= value_D_counter;
+			symbol_0 <= X"53";  --S
+			symbol_1 <= X"69";  --i
+			symbol_2 <= X"67";  --g
+			symbol_3 <= X"6E";  --n
+			symbol_4 <= X"61";  --a
+			symbol_5 <= X"6C";  --l
+			symbol_6 <= X"44";  --D
+			symbol_7 <= X"20";  --space
+			symbol_8 <= X"74";  --t
+			symbol_9 <= X"3D";  --=
+			symbol_10 <= X"6E"; --n
+			symbol_11 <= X"73"; --s
+			if rotary_event='1' then
+			  if rotary_left='1' then 
+				 n_D <= n_D+1; --increase vector component
+				 value_D_counter <= value_D_counter + 1;
+			  else
+				 n_D <= n_D-1; --decrease vector component
+				 value_D_counter <= value_D_counter - 1;
+			  end if;
+			end if;
+		when "1111" => --select Hinput to modify pulse length
+			value_show <= value_H_counter;
+			symbol_0 <= X"53";  --S
+			symbol_1 <= X"69";  --i
+			symbol_2 <= X"67";  --g
+			symbol_3 <= X"6E";  --n
+			symbol_4 <= X"61";  --a
+			symbol_5 <= X"6C";  --l
+			symbol_6 <= X"48";  --H
+			symbol_7 <= X"20";  --space
+			symbol_8 <= X"74";  --t
+			symbol_9 <= X"3D";  --=
+			symbol_10 <= X"6E"; --n
+			symbol_11 <= X"73"; --s
+			if rotary_event='1' then
+			  if rotary_left='1' then 
+				 n_H <= n_H+1; --increase vector component
+				 value_H_counter <= value_H_counter + 1;
+			  else
+				 n_H <= n_H-1; --decrease vector component
+				 value_H_counter <= value_H_counter - 1;
+			  end if;
+			end if;		
+		when others=> --no input signal is changed
+			value_show <= 0;
+			symbol_0 <= X"74";  --t
+			symbol_1 <= X"20";  --space
+			symbol_2 <= X"57";  --w
+			symbol_3 <= X"49";  --i
+			symbol_4 <= X"4E";  --n
+			symbol_5 <= X"44";  --d
+			symbol_6 <= X"4F";  --o
+			symbol_7 <= X"57";  --w
+			symbol_8 <= X"20";  --space
+			symbol_9 <= X"20";  --space
+			symbol_10 <= X"20"; --space
+			symbol_11 <= X"20"; --space
+			value_show <= 0;
+		end case;
+	end if;
+end process;
+
+A_mux <= A_internal(n_A); --transformation from a dynamic vector component to a static signal
+B_mux <= B_internal(n_B); --transformation from a dynamic vector component to a static signal
+C_mux <= C_internal(n_C); --transformation from a dynamic vector component to a static signal
+D_mux <= D_internal(n_D); --transformation from a dynamic vector component to a static signal
+H_mux <= H_internal(n_H); --transformation from a dynamic vector component to a static signal
+ 
+	MA: entity work.shortener port map (delayedpulse => A_mux, pulse => Ainput, pulseout => Ashort);
+	MB: entity work.shortener port map (delayedpulse => B_mux, pulse => Binput, pulseout => Bshort);
+	MC: entity work.shortener port map (delayedpulse => C_mux, pulse => Cinput, pulseout => Cshort);
+	MD: entity work.shortener port map (delayedpulse => D_mux, pulse => Dinput, pulseout => Dshort);
+	MH: entity work.shortener port map (delayedpulse => H_mux, pulse => Hinput, pulseout => Hshort);
+
+	CPA: entity work.coincidence_pulse port map( a => Ashort, b => Hshort, y => Coincidence_A ); 
+	CPB: entity work.coincidence_pulse port map( a => Bshort, b => Hshort, y => Coincidence_B ); 
+	CPC: entity work.coincidence_pulse port map( a => Cshort, b => Hshort, y => Coincidence_C ); 
+	CPD: entity work.coincidence_pulse port map( a => Dshort, b => Hshort, y => Coincidence_D ); 
+
+baud_rate_process: process (clk)
+begin
+	if clk'event and clk = '1' then
+		if baud_rate_count = 2064 then
+			baud_rate_clk <= '1';
+			baud_rate_count <= 0;
+		else
+			baud_rate_count <= baud_rate_count + 1;
+			baud_rate_clk <= '0'; -- after 1ns;
+		end if;
+	end if;
+end process;
+
+data_trigger_process: process (baud_rate_clk)
+begin
+	if baud_rate_clk'event and baud_rate_clk = '1' then
+		if data_trigger_count = 1920 then
+			data_trigger_count <= 0;
+			data_trigger_reset <= '1';
+			data_trigger <= '1';
+		elsif data_trigger_count = 0 or data_trigger_count = 1 then
+			data_trigger_count <= data_trigger_count + 1;
+			data_trigger_reset <= '0';
+			data_trigger <= '1';
+		else
+			data_trigger_count <= data_trigger_count + 1;
+			data_trigger_reset <= '0';
+			data_trigger <= '0';
+		end if;
+	end if;
+end process;
+
+	CA: entity work.counter port map (clear => data_trigger_reset, countclock => Ashort, output => A_top);  
+	CB: entity work.counter port map (clear => data_trigger_reset, countclock => Bshort, output => B_top);
+	CC: entity work.counter port map (clear => data_trigger_reset, countclock => Cshort, output => C_top);
+	CD: entity work.counter port map (clear => data_trigger_reset, countclock => Dshort, output => D_top);
+	CH: entity work.counter port map (clear => data_trigger_reset, countclock => Hshort, output => H_top);
+	
+	CHA: entity work.counter port map (clear => data_trigger_reset, countclock => Coincidence_A, output => Count_top_A); 	
+	CHB: entity work.counter port map (clear => data_trigger_reset, countclock => Coincidence_B, output => Count_top_B); 	
+	CHC: entity work.counter port map (clear => data_trigger_reset, countclock => Coincidence_C, output => Count_top_C); 	
+	CHD: entity work.counter port map (clear => data_trigger_reset, countclock => Coincidence_D, output => Count_top_D); 	
+	
+trigger_reset: process ( data_trigger_reset )
+begin
+	if data_trigger_reset'EVENT and data_trigger_reset = '1' then
+		A_out <= A_top;
+		B_out <= B_top;
+		C_out <= C_top;
+		D_out <= D_top;
+		H_out <= H_top;
+		Count_out_A <= Count_top_A;
+		Count_out_B <= Count_top_B;
+		Count_out_C <= Count_top_C;
+		Count_out_D <= Count_top_D;
+	end if;
+end process;
+	
+	D0: entity work.dataout40 port map( A => A_out, B => B_out, C => C_out, D => D_out, H => H_out, 
+													Coincidence_A => Count_out_A, Coincidence_B => Count_out_B, 
+													Coincidence_C => Count_out_C, Coincidence_D => Count_out_D, 
+													clk => baud_rate_clk, data_trigger => data_trigger, 
+													RS232_out => RS232_out); 
+	
+	LCD1: entity work.LCD port map(clk => clk, reset => reset, SF_D => SF_D(3 downto 0), 
+											 LCD_E => LCD_E, LCD_RS => LCD_RS, LCD_RW => LCD_RW, 
+											 value_counter => value_show, character_0 => symbol_0, 
+											 character_1 => symbol_1, character_2 => symbol_2, 
+											 character_3 => symbol_3, character_4 => symbol_4, 
+											 character_5 => symbol_5, character_6 => symbol_6, 
+											 character_7 => symbol_7, character_8 => symbol_8,
+											 character_9 => symbol_9, character_10 => symbol_10, 
+											 character_11 => symbol_11);	
+
+LED(0) <= choose(0);
+LED(1) <= choose(1);
+LED(2) <= choose(2);
+LED(3) <= choose(3);
+
+--baud_counter: process ( baud_rate_count )
+--begin
+--	if baud_rate_count = "0000000000000000000000000000101000101100" then  --2604   
+--		baud_rate_clk <= '1';
+--	else
+--		baud_rate_clk <= '0' after 1ns;
+--	end if;
+--end process;
+
+--data_counter: process ( data_trigger_count )
+--begin
+--	if data_trigger_count = "0000000000000000000000000000011110000000" then   --1920 
+--		data_trigger_reset <= '1';
+--		data_trigger <= '1';
+--	elsif data_trigger_count = "0000000000000000000000000000000000000000" then  --0
+--		data_trigger_reset <= '0';
+--		data_trigger <= '1';
+--	elsif data_trigger_count = "0000000000000000000000000000000000000001" then  --1
+--		data_trigger_reset <= '0';
+--		data_trigger <= '1';
+--	else
+--		data_trigger_reset <= '0';
+--		data_trigger <= '0';
+--	end if;
+--end process;
+		
+--	C0: entity work.counter port map (clear => data_trigger_reset, countclock => baud_rate_clk, output => data_trigger_count);  
+--
+--	C1: entity work.counter port map (clear => baud_rate_clk, countclock => clk, output => baud_rate_count);   
+
+	
+end Behavior;
